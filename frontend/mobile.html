@@ -104,7 +104,7 @@ input[type=number]{-moz-appearance:textfield;}
 /* List item swipe */
 .tx-item-wrap{position:relative;overflow:hidden;}
 .tx-item-actions{position:absolute;inset:0;display:flex;justify-content:flex-end;pointer-events:none;}
-.tx-action-btn{width:70px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:11.5px;font-weight:700;pointer-events:all;}
+.tx-action-btn{width:66px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:11.5px;font-weight:700;pointer-events:all;}
 .tx-item{position:relative;background:var(--surface);display:flex;align-items:center;gap:13px;padding:14px 18px;border-bottom:1px solid var(--border);touch-action:pan-y;transition:transform .2s;}
 
 /* Form row */
@@ -694,6 +694,10 @@ window.closeSheet = function(name) {
   activeSheet = null;
   document.getElementById('scrim').classList.remove('show');
   document.getElementById(`sheet-${name}`).classList.remove('open');
+  if (name === 'add') {
+    S.editingTxId = null;
+    document.getElementById('sheet-add').querySelector('.sheet-title').textContent = '내역 추가';
+  }
 };
 window.closeTopSheet = function() {
   if (activeSheet) closeSheet(activeSheet);
@@ -917,12 +921,12 @@ function addSwipeHandlers() {
     el.addEventListener('pointerdown', e => { startX = e.clientX; curX = startX; });
     el.addEventListener('pointermove', e => {
       curX = e.clientX;
-      const dx = Math.max(-140, Math.min(0, curX - startX));
+      const dx = Math.max(-132, Math.min(0, curX - startX));
       el.style.transform = `translateX(${dx}px)`;
     });
     el.addEventListener('pointerup', () => {
       const dx = curX - startX;
-      if (dx < -70) { el.style.transform = 'translateX(-140px)'; swiped = true; }
+      if (dx < -66) { el.style.transform = 'translateX(-132px)'; swiped = true; }
       else { el.style.transform = 'translateX(0)'; swiped = false; }
     });
     el.addEventListener('pointercancel', () => { el.style.transform = 'translateX(0)'; });
@@ -931,7 +935,33 @@ function addSwipeHandlers() {
 
 window.setFilter = function(f) { S.txFilter = f; renderList(); };
 
-window.editTx = async function(id) { alert('수정 기능은 PC 버전에서 이용해 주세요.'); };
+window.editTx = async function(id) {
+  const tx = S.txList.find(t => t.id === id);
+  if (!tx) return;
+  S.editingTxId = id;
+  S.addType = tx.type;
+  S.addCat = tx.category;
+  S.addDate = tx.transaction_date?.slice(0, 10) || TODAY();
+  window.numKeyStr = String(Number(tx.amount));
+  S.addAmount = Number(tx.amount);
+  if (!S.userCards.length) S.userCards = await cardsApi.list().catch(() => []);
+  const idx = S.userCards.findIndex(c => c.id === tx.card_id);
+  S.addCardIdx = idx >= 0 ? idx : S.userCards.length;
+  openSheet('add');
+  // sheet가 열린 뒤 필드 반영
+  requestAnimationFrame(() => {
+    document.getElementById('btn-expense').classList.toggle('active', tx.type === 'EXPENSE');
+    document.getElementById('btn-income').classList.toggle('active', tx.type === 'INCOME');
+    document.getElementById('add-date-input').value = S.addDate;
+    document.getElementById('add-memo-input').value = tx.memo || '';
+    const color = tx.type === 'EXPENSE' ? 'var(--expense)' : 'var(--income)';
+    document.getElementById('add-amount-display').innerHTML =
+      `<span style="color:${color};">${S.addAmount.toLocaleString('ko-KR')}</span><span style="font-size:21px;font-weight:700;margin-left:3px;color:var(--text-3);">원</span>`;
+    renderAddCatPicker();
+    loadAndRenderPayPicker();
+    document.getElementById('sheet-add').querySelector('.sheet-title').textContent = '내역 수정';
+  });
+};
 
 window.deleteTx = async function(id) {
   if (!confirm('삭제하시겠습니까?')) return;
@@ -1264,11 +1294,17 @@ window.submitAdd = async function() {
   const memo = document.getElementById('add-memo-input').value;
   const opts = payOpts();
   const card_id = opts[S.addCardIdx]?.id ?? null;
-  await transactions.create({ type: S.addType, amount: S.addAmount, transaction_date: date, category: S.addCat, card_id, memo });
+  if (S.editingTxId) {
+    await transactions.update(S.editingTxId, { type: S.addType, amount: S.addAmount, transaction_date: date, category: S.addCat, card_id, memo });
+    S.editingTxId = null;
+  } else {
+    await transactions.create({ type: S.addType, amount: S.addAmount, transaction_date: date, category: S.addCat, card_id, memo });
+  }
   closeSheet('add');
+  document.getElementById('sheet-add').querySelector('.sheet-title').textContent = '내역 추가';
   window.numKeyStr = '0';
   await loadHome();
-  if (S.txList.length) await loadList();
+  await loadList();
 };
 
 // ── BUDGET ──────────────────────────────────────────────────
