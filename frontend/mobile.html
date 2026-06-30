@@ -421,8 +421,11 @@ input[type=number]{-moz-appearance:textfield;}
       <!-- amount -->
       <div style="text-align:center;padding:6px 0 18px;border-bottom:1px solid var(--border);">
         <div style="font-size:12px;font-weight:700;color:var(--text-3);margin-bottom:5px;">금액</div>
-        <div style="font-size:34px;font-weight:800;letter-spacing:-.8px;font-variant-numeric:tabular-nums;" id="add-amount-display">
-          0<span style="font-size:21px;font-weight:700;margin-left:3px;color:var(--text-3);">원</span>
+        <div style="display:flex;align-items:baseline;justify-content:center;gap:3px;">
+          <input id="add-amount-input" inputmode="numeric" placeholder="0"
+            style="width:auto;max-width:230px;border:none;background:none;text-align:right;font-size:34px;font-weight:800;letter-spacing:-.8px;font-variant-numeric:tabular-nums;color:var(--text);outline:none;"
+            oninput="onAmountInput(this.value)">
+          <span style="font-size:21px;font-weight:700;color:var(--text-3);">원</span>
         </div>
       </div>
       <!-- date -->
@@ -444,10 +447,6 @@ input[type=number]{-moz-appearance:textfield;}
       <div style="padding:16px 0;">
         <div style="font-size:13.5px;font-weight:700;color:var(--text-2);margin-bottom:12px;">결제수단</div>
         <div class="pay-row" id="add-pay-picker"></div>
-      </div>
-      <!-- numeric pad -->
-      <div style="border-top:1px solid var(--border);padding-top:14px;">
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;" id="numpad"></div>
       </div>
     </div>
   </div>
@@ -942,7 +941,6 @@ window.editTx = async function(id) {
   S.addType = tx.type;
   S.addCat = tx.category;
   S.addDate = tx.transaction_date?.slice(0, 10) || TODAY();
-  window.numKeyStr = String(Number(tx.amount));
   S.addAmount = Number(tx.amount);
   if (!S.userCards.length) S.userCards = await cardsApi.list().catch(() => []);
   const idx = S.userCards.findIndex(c => c.id === tx.card_id);
@@ -955,8 +953,7 @@ window.editTx = async function(id) {
     document.getElementById('add-date-input').value = S.addDate;
     document.getElementById('add-memo-input').value = tx.memo || '';
     const color = tx.type === 'EXPENSE' ? 'var(--expense)' : 'var(--income)';
-    document.getElementById('add-amount-display').innerHTML =
-      `<span style="color:${color};">${S.addAmount.toLocaleString('ko-KR')}</span><span style="font-size:21px;font-weight:700;margin-left:3px;color:var(--text-3);">원</span>`;
+    document.getElementById('add-amount-input').value = S.addAmount ? S.addAmount.toLocaleString('ko-KR') : '';
     renderAddCatPicker();
     loadAndRenderPayPicker();
     document.getElementById('sheet-add').querySelector('.sheet-title').textContent = '내역 수정';
@@ -1232,13 +1229,22 @@ function initAddSheet() {
   S.addDate = TODAY();
   document.getElementById('btn-expense').classList.add('active');
   document.getElementById('btn-income').classList.remove('active');
-  document.getElementById('add-amount-display').innerHTML = `0<span style="font-size:21px;font-weight:700;margin-left:3px;color:var(--text-3);">원</span>`;
+  document.getElementById('add-amount-input').value = '';
   document.getElementById('add-date-input').value = S.addDate;
   document.getElementById('add-memo-input').value = '';
   renderAddCatPicker();
   loadAndRenderPayPicker();
-  renderNumpad();
 }
+
+window.onAmountInput = function(raw) {
+  const digits = raw.replace(/[^0-9]/g, '').slice(0, 10);
+  S.addAmount = parseInt(digits, 10) || 0;
+  const el = document.getElementById('add-amount-input');
+  el.value = S.addAmount ? S.addAmount.toLocaleString('ko-KR') : '';
+  // 커서를 끝으로
+  const len = el.value.length;
+  el.setSelectionRange(len, len);
+};
 
 function renderAddCatPicker() {
   const cats = S.addType === 'EXPENSE' ? EXP_CATS : INC_CATS;
@@ -1257,25 +1263,6 @@ async function loadAndRenderPayPicker() {
     `<button class="pay-chip${i===S.addCardIdx?' active':''}" onclick="pickAddPay(${i})">${o.label}</button>`).join('');
 }
 
-function renderNumpad() {
-  const keys = ['1','2','3','4','5','6','7','8','9','00','0','⌫'];
-  document.getElementById('numpad').innerHTML = keys.map(k =>
-    `<button onclick="numKey('${k}')" style="height:52px;border-radius:14px;background:var(--surface-2);font-size:18px;font-weight:700;color:var(--text);">${k}</button>`).join('');
-}
-
-window.numKeyStr = ''; // for string-based input
-window.numKey = function(k) {
-  let s = window.numKeyStr || '0';
-  if (k === '⌫') s = s.slice(0,-1) || '0';
-  else if (s === '0' && k !== '00') s = k;
-  else if (k === '00') s = s === '0' ? '0' : s + '00';
-  else s += k;
-  if (s.length > 10) return;
-  window.numKeyStr = s;
-  S.addAmount = parseInt(s, 10) || 0;
-  const color = S.addType === 'EXPENSE' ? 'var(--expense)' : 'var(--income)';
-  document.getElementById('add-amount-display').innerHTML = `<span style="color:${color};">${parseInt(s,10).toLocaleString('ko-KR')}</span><span style="font-size:21px;font-weight:700;margin-left:3px;color:var(--text-3);">원</span>`;
-};
 
 window.setAddType = function(t) {
   S.addType = t; S.addCat = null;
@@ -1301,8 +1288,6 @@ window.submitAdd = async function() {
     await transactions.create({ type: S.addType, amount: S.addAmount, transaction_date: date, category: S.addCat, card_id, memo });
   }
   closeSheet('add');
-  document.getElementById('sheet-add').querySelector('.sheet-title').textContent = '내역 추가';
-  window.numKeyStr = '0';
   await loadHome();
   await loadList();
 };
