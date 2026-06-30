@@ -200,7 +200,7 @@ function renderStats(s) {
     catStatEl.innerHTML = s.categoryStats.map((c) => `
       <div class="legend-row">
         <span>${c.category}</span>
-        <span>${Math.round((c.total / total) * 10) / 10}%</span>
+        <span>${Math.round((c.total / total) * 1000) / 10}%</span>
         <span>${won(c.total)}</span>
       </div>`).join('');
   }
