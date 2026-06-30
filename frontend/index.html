@@ -329,7 +329,7 @@ input{font-family:inherit;}
 <div class="modal-scrim" id="fixed-modal" style="display:none;" onclick="closeAddFixedModal()">
   <div class="modal-box" onclick="event.stopPropagation()">
     <div class="modal-header">
-      고정지출 추가
+      <span id="fixed-modal-title">고정지출 추가</span>
       <button onclick="closeAddFixedModal()" style="width:32px;height:32px;border-radius:9px;background:var(--surface-2);color:var(--text-2);">✕</button>
     </div>
     <div class="modal-body">
@@ -501,7 +501,7 @@ function onSaveBudgetClick() {
   app.saveBudget(val, []);
 }
 
-let fixedSelectedCat = null;
+let fixedSelectedCat = null, editingFixedId = null;
 
 async function applyFixedThisMonth() {
   try {
@@ -513,7 +513,9 @@ async function applyFixedThisMonth() {
 }
 
 async function openAddFixedModal() {
+  editingFixedId = null;
   fixedSelectedCat = null;
+  document.getElementById('fixed-modal-title').textContent = '고정지출 추가';
   document.getElementById('fixed-name').value = '';
   document.getElementById('fixed-amount').value = '';
   document.getElementById('fixed-day').value = '';
@@ -521,6 +523,25 @@ async function openAddFixedModal() {
   document.getElementById('fixed-modal').style.display = 'flex';
   await loadUserCards();
   fixedSelectedPayIdx = userCards.length; // 기본값: 현금
+  renderFixedPayPicker();
+}
+
+async function openEditFixedModal(id) {
+  const { fixedExpenses } = await import('./js/api/index.js');
+  const list = await fixedExpenses.list();
+  const fe = list.find((f) => f.id === id);
+  if (!fe) { alert('고정지출을 찾을 수 없습니다.'); return; }
+  editingFixedId = id;
+  fixedSelectedCat = fe.category;
+  document.getElementById('fixed-modal-title').textContent = '고정지출 수정';
+  document.getElementById('fixed-name').value = fe.name;
+  document.getElementById('fixed-amount').value = fe.amount;
+  document.getElementById('fixed-day').value = fe.billing_day;
+  renderFixedCatPicker();
+  document.getElementById('fixed-modal').style.display = 'flex';
+  await loadUserCards();
+  const cardIdx = userCards.findIndex((c) => c.id === fe.card_id);
+  fixedSelectedPayIdx = cardIdx >= 0 ? cardIdx : userCards.length; // 매칭 카드 없으면 현금
   renderFixedPayPicker();
 }
 function closeAddFixedModal() { document.getElementById('fixed-modal').style.display = 'none'; }
@@ -551,7 +572,14 @@ async function submitAddFixed() {
   const card_id = fixedPayOpts[fixedSelectedPayIdx]?.id ?? null;
   try {
     const { fixedExpenses } = await import('./js/api/index.js');
-    await fixedExpenses.create({ name, amount, billing_day, category: fixedSelectedCat, card_id, is_active: true });
+    if (editingFixedId) {
+      await fixedExpenses.update(editingFixedId, { name, amount, billing_day, category: fixedSelectedCat, card_id });
+    } else {
+      await fixedExpenses.create({ name, amount, billing_day, category: fixedSelectedCat, card_id, is_active: true });
+      // 생성 시 이번 달 내역에 자동 반영 → 홈에 바로 표시
+      const { year, month } = (await import('./js/store.js')).getState();
+      await fixedExpenses.apply(year, month);
+    }
     closeAddFixedModal();
     const { loadFixed } = await import('./js/pages/fixed.js');
     await loadFixed();

@@ -234,6 +234,7 @@ function renderFixed(s) {
         <input type="checkbox" ${f.is_active ? 'checked' : ''} onchange="app.toggleFixed('${f.id}', this.checked)">
         <span></span>
       </label>
+      <button onclick="openEditFixedModal('${f.id}')">✏️</button>
       <button onclick="app.deleteFixed('${f.id}')">🗑</button>
     </div>`).join('');
 }
