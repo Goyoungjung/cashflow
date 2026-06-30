@@ -276,6 +276,7 @@ input{font-family:inherit;}
             </div>
             <input type="checkbox" id="auto-reflect-toggle" onchange="app.toggleAutoReflect(this.checked)" style="width:20px;height:20px;cursor:pointer;">
           </div>
+          <button onclick="applyFixedThisMonth()" style="width:100%;height:48px;border-radius:14px;background:var(--brand);color:var(--on-brand);font-size:13.5px;font-weight:800;margin-top:2px;">이번 달 내역에 반영</button>
         </div>
         <div class="panel" style="padding:0;overflow:hidden;">
           <div id="fixed-list"></div>
@@ -484,6 +485,15 @@ function onSaveBudgetClick() {
 }
 
 let fixedSelectedCat = null, fixedSelectedPay = '현금';
+
+async function applyFixedThisMonth() {
+  try {
+    const { applyThisMonth } = await import('./js/pages/fixed.js');
+    await applyThisMonth();
+    alert('이번 달 내역에 반영됐습니다.');
+    app.goTab && app.goTab('home');
+  } catch (e) { alert(e.message); }
+}
 
 function openAddFixedModal() {
   fixedSelectedCat = null; fixedSelectedPay = '현금';
