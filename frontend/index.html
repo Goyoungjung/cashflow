@@ -380,23 +380,35 @@ input{font-family:inherit;}
 <script src="./env.js"></script>
 <script>
 // 모달 상태
-let addType = 'EXPENSE', selectedCat = null, selectedPay = '현금';
+let addType = 'EXPENSE', selectedCat = null;
 let selectedIssuer = '삼성', selectedColor = '#1428A0';
+let userCards = [];
+let payOpts = [], selectedPayIdx = 0;
+let fixedPayOpts = [], fixedSelectedPayIdx = 0;
 const EXP_CATS = ['식비','교통','쇼핑','의료','문화/여가','카페','주거','기타'];
 const INC_CATS = ['급여','부수입','용돈','기타'];
-const PAYS = ['삼성카드','현대카드','신한카드','KB국민','현금','계좌이체'];
 const ISSUERS = ['삼성','현대','신한','KB','롯데','하나','우리','기타'];
 const COLORS = ['#1428A0','#111418','#0046FF','#FFBC00','#E60012','#008C95','#0067AC','#7C5CFF','#FF6B6B','#2DC6A6'];
 const CAT_EMOJI = {'식비':'🍱','교통':'🚌','쇼핑':'🛍','의료':'💊','문화/여가':'🎬','카페':'☕','주거':'🏠','기타':'📦','급여':'💵','부수입':'📈','용돈':'🎁'};
 
-function openAddModal() {
-  addType = 'EXPENSE'; selectedCat = null; selectedPay = '현금';
+async function loadUserCards() {
+  try {
+    const { cards } = await import('./js/api/index.js');
+    userCards = await cards.list();
+  } catch { userCards = []; }
+}
+
+async function openAddModal() {
+  addType = 'EXPENSE'; selectedCat = null;
   const today = new Date().toISOString().slice(0, 10);
   document.getElementById('add-date').value = today;
   document.getElementById('add-amount').value = '';
   document.getElementById('add-memo').value = '';
-  renderCatPicker(); renderPayPicker();
+  renderCatPicker();
   document.getElementById('add-modal').style.display = 'flex';
+  await loadUserCards();
+  selectedPayIdx = userCards.length; // 기본값: 현금
+  renderPayPicker();
 }
 function closeAddModal() { document.getElementById('add-modal').style.display = 'none'; }
 
@@ -416,19 +428,24 @@ function renderCatPicker() {
 }
 function pickCat(c) { selectedCat = c; renderCatPicker(); }
 
-function renderPayPicker() {
-  document.getElementById('pay-picker').innerHTML = PAYS.map((p) =>
-    `<button onclick="pickPay('${p}')" style="padding:9px 14px;border-radius:12px;font-size:12.5px;font-weight:700;border:1.5px solid ${selectedPay === p ? 'var(--brand)' : 'var(--border-2)'};background:${selectedPay === p ? 'var(--brand)' : 'var(--surface)'};color:${selectedPay === p ? 'var(--on-brand)' : 'var(--text-2)'};">${p}</button>`).join('');
+function payButtonStyle(sel) {
+  return `padding:9px 14px;border-radius:12px;font-size:12.5px;font-weight:700;border:1.5px solid ${sel ? 'var(--brand)' : 'var(--border-2)'};background:${sel ? 'var(--brand)' : 'var(--surface)'};color:${sel ? 'var(--on-brand)' : 'var(--text-2)'};`;
 }
-function pickPay(p) { selectedPay = p; renderPayPicker(); }
+function renderPayPicker() {
+  payOpts = [...userCards.map((c) => ({ label: c.name, id: c.id })), { label: '현금', id: null }, { label: '계좌이체', id: null }];
+  document.getElementById('pay-picker').innerHTML = payOpts.map((o, i) =>
+    `<button onclick="pickPay(${i})" style="${payButtonStyle(i === selectedPayIdx)}">${o.label}</button>`).join('');
+}
+function pickPay(i) { selectedPayIdx = i; renderPayPicker(); }
 
 async function submitAdd() {
   const amount = parseInt(document.getElementById('add-amount').value || '0', 10);
   const date = document.getElementById('add-date').value;
   const memo = document.getElementById('add-memo').value;
   if (!amount || !selectedCat) { alert('금액과 카테고리를 입력하세요.'); return; }
+  const card_id = payOpts[selectedPayIdx]?.id ?? null;
   try {
-    await app.saveTransaction({ type: addType, amount, transaction_date: date, category: selectedCat, card_id: null, memo, day: 1 });
+    await app.saveTransaction({ type: addType, amount, transaction_date: date, category: selectedCat, card_id, memo });
     closeAddModal();
   } catch (e) { alert(e.message); }
 }
@@ -484,7 +501,7 @@ function onSaveBudgetClick() {
   app.saveBudget(val, []);
 }
 
-let fixedSelectedCat = null, fixedSelectedPay = '현금';
+let fixedSelectedCat = null;
 
 async function applyFixedThisMonth() {
   try {
@@ -495,13 +512,16 @@ async function applyFixedThisMonth() {
   } catch (e) { alert(e.message); }
 }
 
-function openAddFixedModal() {
-  fixedSelectedCat = null; fixedSelectedPay = '현금';
+async function openAddFixedModal() {
+  fixedSelectedCat = null;
   document.getElementById('fixed-name').value = '';
   document.getElementById('fixed-amount').value = '';
   document.getElementById('fixed-day').value = '';
-  renderFixedCatPicker(); renderFixedPayPicker();
+  renderFixedCatPicker();
   document.getElementById('fixed-modal').style.display = 'flex';
+  await loadUserCards();
+  fixedSelectedPayIdx = userCards.length; // 기본값: 현금
+  renderFixedPayPicker();
 }
 function closeAddFixedModal() { document.getElementById('fixed-modal').style.display = 'none'; }
 
@@ -514,10 +534,11 @@ function renderFixedCatPicker() {
 function pickFixedCat(c) { fixedSelectedCat = c; renderFixedCatPicker(); }
 
 function renderFixedPayPicker() {
-  document.getElementById('fixed-pay-picker').innerHTML = PAYS.map((p) =>
-    `<button onclick="pickFixedPay('${p}')" style="padding:9px 14px;border-radius:12px;font-size:12.5px;font-weight:700;border:1.5px solid ${fixedSelectedPay === p ? 'var(--brand)' : 'var(--border-2)'};background:${fixedSelectedPay === p ? 'var(--brand)' : 'var(--surface)'};color:${fixedSelectedPay === p ? 'var(--on-brand)' : 'var(--text-2)'};">${p}</button>`).join('');
+  fixedPayOpts = [...userCards.map((c) => ({ label: c.name, id: c.id })), { label: '현금', id: null }, { label: '계좌이체', id: null }];
+  document.getElementById('fixed-pay-picker').innerHTML = fixedPayOpts.map((o, i) =>
+    `<button onclick="pickFixedPay(${i})" style="${payButtonStyle(i === fixedSelectedPayIdx)}">${o.label}</button>`).join('');
 }
-function pickFixedPay(p) { fixedSelectedPay = p; renderFixedPayPicker(); }
+function pickFixedPay(i) { fixedSelectedPayIdx = i; renderFixedPayPicker(); }
 
 async function submitAddFixed() {
   const name = document.getElementById('fixed-name').value.trim();
@@ -527,9 +548,10 @@ async function submitAddFixed() {
   if (!amount) { alert('금액을 입력하세요.'); return; }
   if (!billing_day || billing_day < 1 || billing_day > 31) { alert('결제일을 1~31 사이로 입력하세요.'); return; }
   if (!fixedSelectedCat) { alert('카테고리를 선택하세요.'); return; }
+  const card_id = fixedPayOpts[fixedSelectedPayIdx]?.id ?? null;
   try {
     const { fixedExpenses } = await import('./js/api/index.js');
-    await fixedExpenses.create({ name, amount, billing_day, category: fixedSelectedCat, card_id: null, is_active: true });
+    await fixedExpenses.create({ name, amount, billing_day, category: fixedSelectedCat, card_id, is_active: true });
     closeAddFixedModal();
     const { loadFixed } = await import('./js/pages/fixed.js');
     await loadFixed();

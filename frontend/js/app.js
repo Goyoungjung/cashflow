@@ -39,10 +39,11 @@ async function changeMonth(delta) {
 async function saveTransaction(form) {
   const { year, month } = getState();
   const pad = (n) => String(n).padStart(2, '0');
+  const transaction_date = form.transaction_date || `${year}-${pad(month)}-${pad(form.day)}`;
   await transactions.create({
     type: form.type,
     amount: Number(form.amount),
-    transaction_date: `${year}-${pad(month)}-${pad(form.day)}`,
+    transaction_date,
     category: form.category,
     card_id: form.card_id ?? null,
     memo: form.memo ?? null,
