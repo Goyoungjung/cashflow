@@ -80,7 +80,7 @@ input[type=number]{-moz-appearance:textfield;}
 .chip.active{background:var(--brand);color:var(--on-brand);border-color:var(--brand);}
 
 /* Category Picker */
-.cat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+.cat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px 6px;}
 .cat-btn{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 4px;border-radius:14px;background:var(--surface-2);border:1.5px solid transparent;font-size:11.5px;font-weight:700;color:var(--text-2);transition:all .15s;}
 .cat-btn.active{border-color:var(--brand);background:var(--surface);color:var(--text);}
 .cat-icon-wrap{width:38px;height:38px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;}
@@ -434,20 +434,19 @@ input[type=number]{-moz-appearance:textfield;}
         <div style="font-size:12px;font-weight:700;color:var(--text-3);margin-bottom:5px;">금액</div>
         <div style="display:flex;align-items:baseline;justify-content:center;gap:3px;">
           <input id="add-amount-input" inputmode="numeric" placeholder="0"
-            style="width:auto;max-width:230px;border:none;background:none;text-align:right;font-size:34px;font-weight:800;letter-spacing:-.8px;font-variant-numeric:tabular-nums;color:var(--text);outline:none;"
+            style="width:210px;border:none;background:none;text-align:right;font-size:34px;font-weight:800;letter-spacing:-.8px;font-variant-numeric:tabular-nums;color:var(--text);outline:none;"
             oninput="onAmountInput(this.value)">
           <span style="font-size:21px;font-weight:700;color:var(--text-3);">원</span>
         </div>
       </div>
       <!-- date -->
-      <div class="form-row">
+      <div class="form-row" style="cursor:pointer;" onclick="document.getElementById('add-date-input').showPicker?document.getElementById('add-date-input').showPicker():document.getElementById('add-date-input').click()">
         <span class="form-label">날짜</span>
-        <input type="date" id="add-date-input" class="form-input" style="font-size:14px;font-weight:700;">
-      </div>
-      <!-- memo -->
-      <div class="form-row">
-        <span class="form-label">메모</span>
-        <input type="text" id="add-memo-input" class="form-input" placeholder="내용 (선택)">
+        <div style="display:flex;align-items:center;gap:7px;font-size:14px;font-weight:700;color:var(--text);">
+          <span id="add-date-label"></span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <input type="date" id="add-date-input" style="opacity:0;width:0;height:0;position:absolute;pointer-events:none;" onchange="onAddDateChange(this.value)">
       </div>
       <!-- category -->
       <div style="padding:16px 0;border-bottom:1px solid var(--border);">
@@ -455,9 +454,26 @@ input[type=number]{-moz-appearance:textfield;}
         <div class="cat-grid" id="add-cat-picker"></div>
       </div>
       <!-- payment -->
-      <div style="padding:16px 0;">
+      <div style="padding:16px 0;border-bottom:1px solid var(--border);">
         <div style="font-size:13.5px;font-weight:700;color:var(--text-2);margin-bottom:12px;">결제수단</div>
         <div class="pay-row" id="add-pay-picker"></div>
+      </div>
+      <!-- memo -->
+      <div class="form-row">
+        <span class="form-label">메모</span>
+        <input type="text" id="add-memo-input" class="form-input" placeholder="내용 (선택)">
+      </div>
+      <!-- fixed expense toggle -->
+      <div style="padding:16px 2px 4px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <div style="font-size:13.5px;font-weight:700;color:var(--text);">고정지출</div>
+            <div style="font-size:11.5px;font-weight:600;color:var(--text-3);margin-top:2px;">매월 반복되는 내역으로 등록</div>
+          </div>
+          <button onclick="toggleAddFixed()" id="add-fixed-track" style="width:50px;height:30px;border-radius:99px;position:relative;transition:background .22s;background:var(--surface-3);">
+            <span id="add-fixed-knob" style="position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:left .22s;"></span>
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -582,7 +598,7 @@ const S = {
   userCards: [], fixedExpenses: [],
   userSettings: { budget_alert_on: true, auto_reflect: true },
   // add form
-  addType: 'EXPENSE', addAmount: 0, addCat: null, addCardIdx: -1, addDate: TODAY(),
+  addType: 'EXPENSE', addAmount: 0, addCat: null, addCardIdx: -1, addDate: TODAY(), addFixed: false,
   // card form
   cardName: '', cardIssuer: '삼성', cardColor: '#1428A0',
   // fixed form
@@ -728,7 +744,9 @@ window.closeSheet = function(name) {
   document.getElementById(`sheet-${name}`).classList.remove('open');
   if (name === 'add') {
     S.editingTxId = null;
+    S.addFixed = false;
     document.getElementById('sheet-add').querySelector('.sheet-title').textContent = '내역 추가';
+    _setFixedUI(false);
   }
 };
 window.closeTopSheet = function() {
@@ -983,10 +1001,11 @@ window.editTx = async function(id) {
   requestAnimationFrame(() => {
     document.getElementById('btn-expense').classList.toggle('active', tx.type === 'EXPENSE');
     document.getElementById('btn-income').classList.toggle('active', tx.type === 'INCOME');
-    document.getElementById('add-date-input').value = S.addDate;
+    updateAddDateLabel();
     document.getElementById('add-memo-input').value = tx.memo || '';
-    const color = tx.type === 'EXPENSE' ? 'var(--expense)' : 'var(--income)';
     document.getElementById('add-amount-input').value = S.addAmount ? S.addAmount.toLocaleString('ko-KR') : '';
+    S.addFixed = tx.is_fixed || false;
+    _setFixedUI(S.addFixed);
     renderAddCatPicker();
     loadAndRenderPayPicker();
     document.getElementById('sheet-add').querySelector('.sheet-title').textContent = '내역 수정';
@@ -1257,14 +1276,43 @@ window.submitCard = async function() {
 };
 
 // ── ADD SHEET ────────────────────────────────────────────────
+function _fmtDateLabel(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const today = TODAY();
+  const [ty, tm, td] = today.split('-').map(Number);
+  const suffix = (y===ty && m===tm && d===td) ? ' (오늘)' : '';
+  return `${y}. ${m}. ${d}${suffix}`;
+}
+
+function updateAddDateLabel() {
+  const input = document.getElementById('add-date-input');
+  input.value = S.addDate;
+  document.getElementById('add-date-label').textContent = _fmtDateLabel(S.addDate);
+}
+
+function _setFixedUI(on) {
+  document.getElementById('add-fixed-track').style.background = on ? 'var(--income)' : 'var(--surface-3)';
+  document.getElementById('add-fixed-knob').style.left = on ? '23px' : '3px';
+}
+
+window.onAddDateChange = function(val) {
+  if (val) { S.addDate = val; updateAddDateLabel(); }
+};
+
+window.toggleAddFixed = function() {
+  S.addFixed = !S.addFixed;
+  _setFixedUI(S.addFixed);
+};
+
 function initAddSheet() {
   S.addType = 'EXPENSE'; S.addAmount = 0; S.addCat = null; S.addCardIdx = -1;
-  S.addDate = TODAY();
+  S.addDate = TODAY(); S.addFixed = false;
   document.getElementById('btn-expense').classList.add('active');
   document.getElementById('btn-income').classList.remove('active');
   document.getElementById('add-amount-input').value = '';
-  document.getElementById('add-date-input').value = S.addDate;
   document.getElementById('add-memo-input').value = '';
+  updateAddDateLabel();
+  _setFixedUI(false);
   renderAddCatPicker();
   loadAndRenderPayPicker();
 }
@@ -1310,15 +1358,15 @@ window.pickAddPay = function(i) { S.addCardIdx = i; document.querySelectorAll('#
 window.submitAdd = async function() {
   if (!S.addAmount) { alert('금액을 입력하세요.'); return; }
   if (!S.addCat) { alert('카테고리를 선택하세요.'); return; }
-  const date = document.getElementById('add-date-input').value || S.addDate;
+  const date = S.addDate;
   const memo = document.getElementById('add-memo-input').value;
   const opts = payOpts();
   const card_id = opts[S.addCardIdx]?.id ?? null;
   if (S.editingTxId) {
-    await transactions.update(S.editingTxId, { type: S.addType, amount: S.addAmount, transaction_date: date, category: S.addCat, card_id, memo });
+    await transactions.update(S.editingTxId, { type: S.addType, amount: S.addAmount, transaction_date: date, category: S.addCat, card_id, memo, is_fixed: S.addFixed });
     S.editingTxId = null;
   } else {
-    await transactions.create({ type: S.addType, amount: S.addAmount, transaction_date: date, category: S.addCat, card_id, memo });
+    await transactions.create({ type: S.addType, amount: S.addAmount, transaction_date: date, category: S.addCat, card_id, memo, is_fixed: S.addFixed });
   }
   closeSheet('add');
   await loadHome();
