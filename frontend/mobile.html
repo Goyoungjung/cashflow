@@ -127,10 +127,21 @@ input[type=number]{-moz-appearance:textfield;}
 /* Trend legend */
 .trend-legend{display:flex;align-items:center;gap:14px;margin-bottom:16px;}
 .trend-legend-item{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--text-3);}
+
+/* Loading overlay */
+.loading-overlay{position:absolute;inset:0;background:var(--app-bg);z-index:99;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s;}
+.loading-overlay.show{opacity:1;pointer-events:all;}
+.spinner{width:40px;height:40px;border:3.5px solid var(--border-2);border-top-color:var(--brand);border-radius:50%;animation:spin .75s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
 </style>
 </head>
 <body>
 <div id="app" data-theme="light">
+
+  <!-- Loading overlay -->
+  <div class="loading-overlay" id="loading-overlay">
+    <div class="spinner"></div>
+  </div>
 
   <!-- ===== HOME SCREEN ===== -->
   <div id="screen-home" class="screen active">
@@ -587,50 +598,72 @@ window.S = S;
 function payOpts() { return [...S.userCards.map(c=>({label:c.name,id:c.id})),{label:'현금',id:null},{label:'계좌이체',id:null}]; }
 function getMonthStr(year, month) { return `${year}년 ${month}월`; }
 
+let _loadingCount = 0;
+function showLoading() { _loadingCount++; document.getElementById('loading-overlay').classList.add('show'); }
+function hideLoading() { if (--_loadingCount <= 0) { _loadingCount = 0; document.getElementById('loading-overlay').classList.remove('show'); } }
+
 // ── Data loaders ────────────────────────────────────────────
 async function loadHome() {
-  const [cal, summ] = await Promise.all([
-    transactions.calendar(S.year, S.month),
-    budgets.summary(S.year, S.month),
-  ]);
-  S.calendar = cal || {};
-  S.summary = summ;
-  renderHome();
+  showLoading();
+  try {
+    const [cal, summ] = await Promise.all([
+      transactions.calendar(S.year, S.month),
+      budgets.summary(S.year, S.month),
+    ]);
+    S.calendar = cal || {};
+    S.summary = summ;
+    renderHome();
+  } finally { hideLoading(); }
 }
 
 async function loadList() {
-  const data = await transactions.list({ year: S.year, month: S.month });
-  S.txList = data?.items || data || [];
-  renderList();
+  showLoading();
+  try {
+    const data = await transactions.list({ year: S.year, month: S.month });
+    S.txList = data?.items || data || [];
+    renderList();
+  } finally { hideLoading(); }
 }
 
 async function loadStats() {
-  const [cat, card, monthly] = await Promise.all([
-    api.get(`/api/stats/category?year=${S.year}&month=${S.month}`),
-    api.get(`/api/stats/card?year=${S.year}&month=${S.month}`),
-    api.get('/api/stats/monthly?months=6'),
-  ]);
-  S.catStats = cat || [];
-  S.cardStats = card || [];
-  S.monthlyStats = monthly || [];
-  renderStats();
+  showLoading();
+  try {
+    const [cat, card, monthly] = await Promise.all([
+      api.get(`/api/stats/category?year=${S.year}&month=${S.month}`),
+      api.get(`/api/stats/card?year=${S.year}&month=${S.month}`),
+      api.get('/api/stats/monthly?months=6'),
+    ]);
+    S.catStats = cat || [];
+    S.cardStats = card || [];
+    S.monthlyStats = monthly || [];
+    renderStats();
+  } finally { hideLoading(); }
 }
 
 async function loadFixed() {
-  const [list, us] = await Promise.all([fixedApi.list(), settingsApi.get()]);
-  S.fixedExpenses = list;
-  S.userSettings = us;
-  renderFixed();
+  showLoading();
+  try {
+    const [list, us] = await Promise.all([fixedApi.list(), settingsApi.get()]);
+    S.fixedExpenses = list;
+    S.userSettings = us;
+    renderFixed();
+  } finally { hideLoading(); }
 }
 
 async function loadCards() {
-  S.userCards = await cardsApi.list(S.year, S.month);
-  renderCards();
+  showLoading();
+  try {
+    S.userCards = await cardsApi.list(S.year, S.month);
+    renderCards();
+  } finally { hideLoading(); }
 }
 
 async function loadSettings() {
-  S.userSettings = await settingsApi.get();
-  renderMore();
+  showLoading();
+  try {
+    S.userSettings = await settingsApi.get();
+    renderMore();
+  } finally { hideLoading(); }
 }
 
 // ── Tab routing ─────────────────────────────────────────────
